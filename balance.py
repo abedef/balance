@@ -44,25 +44,25 @@ class Transaction:
 
         Return a string representation of this Transaction object.
 
-        >>> x = Transaction(129.85, ["birthday", "food"])
+        >>> x = Transaction(129.85, ['birthday', 'food'])
         >>> str(x)
         '129.85 on 2015-11-30 #birthday #food'
         """
         if self.is_negative:
-            string = "-"
+            string = '-'
         else:
-            string = ""
+            string = ''
 
         string += str(self.dollars)
-        string += "."
+        string += '.'
         string += str(self.cents).zfill(2)
 
-        string += " on "
+        string += ' on '
         string += str(self.date)
-        # string += self.date.strftime("%a %b %m, %Y")
+        # string += self.date.strftime('%a %b %m, %Y')
 
         for tag in self.tags:
-            string += " #" + tag
+            string += ' #' + tag
 
         return string
 
@@ -70,7 +70,7 @@ class Transaction:
 class TransactionManager():
     def __init__(self):
         self.transactions = []
-        self.undo_stack = []
+        self.undo_stack = []    # TODO Implement undo functionality
 
     def save_transactions(self):
         """ (TransactionManager) -> NoneType
@@ -89,6 +89,8 @@ class TransactionManager():
         Load Transaction objects stored in the file specified by file_path.
         Create the file if it doesn't exist.
         """
+        self.transactions = []
+
         if not os.path.isfile(file_path):
             with open(file_path, 'w') as f:
                 pass
@@ -101,27 +103,28 @@ class TransactionManager():
                 # Ignore blank lines
                 if line == '':
                     continue
-                else:
-                    words = line.split(' ')
 
-                    amt = float(words.pop(0))       # Pop '1234.56'
-                    words.pop(0)                    # Pop 'on'
+                words = line.split(' ')
 
-                    tmp = words.pop(0).split('-')   # Pop 'YYYY-MM-DD'
-                    date = datetime.date(int(tmp[0]), int(tmp[1]), int(tmp[2]))
+                amt = float(words.pop(0))       # Pop '1234.56'
+                words.pop(0)                    # Pop 'on'
 
-                    tags = []
-                    for word in words:              # Left with tags (if any)
-                        tags.append(word[1:])       # Leave out preceeding '#'
+                tmp = words.pop(0).split('-')   # Pop 'YYYY-MM-DD'
+                date = datetime.date(int(tmp[0]), int(tmp[1]), int(tmp[2]))
 
-                    self.transactions.append(Transaction(amt, tags, date))
+                tags = []
+                for word in words:              # Left with tags (if any)
+                    tags.append(word[1:])       # Leave out preceeding '#'
 
-    def list_transactions(self):
-        """ (TransactionManager) -> str
+                self.transactions.append(Transaction(amt, tags, date))
+
+    def list_transactions(self, tag=None):
+        """ (TransactionManager, str) -> str
 
         Return the string representation of all Transaction objects,
         each preceeded by an identification number and separated by
-        newline characters.
+        newline characters. If a tag is provided, return only those
+        objects with the given tag.
         """
         string = ''
         id_width = len(str(len(self.transactions) - 1))
@@ -134,6 +137,8 @@ class TransactionManager():
                 amt_width = curr_width
 
         for i in range(len(self.transactions)):
+            if tag is not None and tag not in self.transactions[i].tags:
+                continue
             curr_width = len(str(t.dollars)) + (4 if t.is_negative else 3)
             string += ' #' + str(i).zfill(id_width)         # ID padded with 0s
             string += ' ' * (4 + amt_width - curr_width)    # Justification
@@ -166,8 +171,6 @@ class TransactionManager():
             raise UnrecognizedInputError(amounts[1])
         elif len(dates) > 1:
             raise UnrecognizedInputError(dates[1])
-        elif False: # TODO Handle unrelated fluff (raise error)
-            pass
         else:
             amt = float(amounts[0][1])
             if amounts[0][0] == 'spent':
@@ -175,7 +178,7 @@ class TransactionManager():
 
             tags = []
             for tag in raw_tags:
-                tags.append(tag.strip()[1:])    # Leave out leading '#'
+                tags.append(tag.strip()[1:].lower())    # Leave out leading '#'
 
             if len(dates) == 0:
                 self.transactions.append(Transaction(amt, tags))
@@ -193,17 +196,41 @@ class TransactionManager():
         Remove and return the Transaction object at the given index.
         Raise IndexError if index is out of range.
         """
-        if index  in range(len(self.transactions)):
+        if index in range(len(self.transactions)):
             return self.transactions.pop(index)
         else:
             raise IndexError()
 
+    def total_transactions(self):
+        """ (TransactionManager) -> float
+
+        Return the sum of all Transaction object amounts.
+        """
+        sum_dollars = 0
+        sum_cents = 0
+        for t in self.transactions:
+            if t.is_negative:
+                sum_dollars -= t.dollars
+                sum_cents -= t.cents
+            else:
+                sum_dollars += t.dollars
+                sum_cents += t.cents
+        t.dollars += t.cents // 100
+        t.cents = t.cents % 100
+
+        return sum_dollars + sum_cents / 100
+
+    def edit_transaction(self):
+        pass    # TODO Implement me
+
 
 def usage():
-    print(' load:          load transactions saved to disk\n' +
+    print(' exit:          quit balance.py\n' +
+          ' load:          load transactions saved to disk\n' +
           ' save:          save transactions to disk\n' +
           ' list/ls:       list transactions\n' +
           ' remove/rm n:   remove transaction at index n\n'
+          ' total:         calculate overall balance\n' +
           'In order to record a credit/debit of 1234.56:\n' +
           ' spent/made 1234.56\n' +
           ' spent/made 1234.56 #tag #othertag\n' +
@@ -217,29 +244,36 @@ def run():
     tm = TransactionManager()
     tm.load_transactions()
 
+    # TODO Rewrite regular expressions to be more precise
+    add_rx = ('^(spent|made)((\s\d+)|(\s\d+\.\d\d))' +
+              '(\son\s\d{4}-\d\d-\d\d)?(\s#[a-zA-Z]+)*$')
+    remove_rx = '(^(remove|rm)\s)(\d+)$'
+    search_rx = '(?<=^#)[a-zA-Z]+$'
+
     while True:
-        command = input("balance > ")
+        command = input('balance > ').strip()
 
-        if command == "exit":
+        if command == 'exit':
             break
-        elif command == "load":
+        elif command == 'load':
             tm.load_transactions()
-        elif command == "save":
+        elif command == 'save':
             tm.save_transactions()
-        elif command == "list" or command == "ls":
+        elif command == 'list' or command == 'ls':
             print(tm.list_transactions())
-        elif command == "help":
+        elif command == 'help':
             usage()
+        elif command == 'total':
+            print(' total: ' + str(tm.total_transactions()))
+        elif re.search(add_rx, command) is not None:
+            tm.add_transaction(command)
+        elif re.search(remove_rx, command) is not None:
+            tm.remove_transaction(int(re.search(remove_rx, command).group(3)))
+        elif re.search(search_rx, command) is not None:
+            print(tm.list_transactions(re.search(search_rx, command).group(0)))
         else:
-            if re.findall('^-?[0-9]+\.[0-9][0-9]' +
-                          ' on [0-9]{4}-[0-1][0-9]-[0-3][0-9]' +
-                          '( #[a-zA-Z]+)*$', command) != []:
-                tm.add_transaction(command)
-            elif re.findall('(remove)|(rm) [0-9]+', command) != []:
-                tm.remove_transaction(int(command.split()[1]))
-            else:
-                print(" Unrecognized input! Type help for usage details.")
+            print(' Unrecognized input! Type help for usage details.')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     run()
