@@ -67,7 +67,7 @@ class Transaction:
         return string
 
 
-class TransactionManager():
+class TransactionManager:
     def __init__(self):
         self.transactions = []
         self.undo_stack = []    # TODO Implement undo functionality
@@ -136,13 +136,15 @@ class TransactionManager():
             if curr_width > amt_width:
                 amt_width = curr_width
 
-        for i in range(len(self.transactions)):
-            if tag is not None and tag not in self.transactions[i].tags:
+        t_id = 0        # Keep track of current Transaction ID
+        for t in self.transactions:
+            if tag is not None and tag not in t.tags:
                 continue
             curr_width = len(str(t.dollars)) + (4 if t.is_negative else 3)
-            string += ' #' + str(i).zfill(id_width)         # ID padded with 0s
+            string += ' #' + str(t_id).zfill(id_width)      # ID padded with 0s
             string += ' ' * (4 + amt_width - curr_width)    # Justification
-            string += str(self.transactions[i]) + '\n'
+            string += str(t) + '\n'
+            t_id += 1
 
         # Trim newline character at end of string if it exists
         if string != '':
@@ -201,7 +203,7 @@ class TransactionManager():
         else:
             raise IndexError()
 
-    def total_transactions(self):
+    def total_transactions(self):   # TODO Test corner cases
         """ (TransactionManager) -> float
 
         Return the sum of all Transaction object amounts.
