@@ -1,2 +1,2 @@
 # balance
-A command line tool to help keep track of spendings.
+A command line tool to help keep track of spending.
